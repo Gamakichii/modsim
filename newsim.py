@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import sqlite3
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Database setup function
 def create_database():
@@ -278,20 +278,20 @@ class GymManagementGUI:
                 return 0.025 * weight
             else:  # General Health
                 return 0.02 * weight
-
+    
     def view_all_trainers(self):
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-        c.execute("SELECT * FROM trainers")
-        trainers = c.fetchall()
-        conn.close()
+            conn = sqlite3.connect('gym_simulation.db')
+            c = conn.cursor()
+            c.execute("SELECT * FROM trainers")
+            trainers = c.fetchall()
+            conn.close()
 
-        if not trainers:
-            messagebox.showinfo("No Trainers", "No trainers found in the database.")
-            return
+            if not trainers:
+                messagebox.showinfo("No Trainers", "No trainers found in the database.")
+                return
 
-        trainer_list = "\n".join([f"{trainer[0]}: {trainer[1]}, Expertise: {trainer[2]}, Available Days: {trainer[3]}" for trainer in trainers])
-        messagebox.showinfo("Trainers", trainer_list)
+            trainer_list = "\n".join([f"{trainer[0]}: {trainer[1]}, Expertise: {trainer[2]}, Available Days: {trainer[3]}" for trainer in trainers])
+            messagebox.showinfo("Trainers", trainer_list)
 
     def view_all_members(self):
         conn = sqlite3.connect('gym_simulation.db')
@@ -324,13 +324,44 @@ class GymManagementGUI:
             weight_change = initial_weight * (0.005 * days_passed)  # Example logic for weight change
             new_weight = initial_weight + weight_change
 
+            # Get the last recorded progress date for this member
+            c.execute("SELECT date FROM progress WHERE member_id = ? ORDER BY date DESC LIMIT 1", (member_id,))
+            last_date = c.fetchone()
+            if last_date:
+                last_date = datetime.strptime(last_date[0], '%Y-%m-%d')
+                current_date = last_date + timedelta(days=days_passed)
+            else:
+                current_date = datetime.now()
+
             # Insert progress into the database
             c.execute("INSERT INTO progress (member_id, date, weight) VALUES (?, ?, ?)",
-                      (member_id, datetime.now().strftime('%Y-%m-%d'), new_weight))
+                      (member_id, current_date.strftime('%Y-%m-%d'), new_weight))
         conn.commit()
         conn.close()
 
         messagebox.showinfo("Success", "Progress simulated successfully!")
+
+    def display_member_progress(self, event):
+        member_name = self.view_progress_member_combo.get()
+
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT member_id FROM members WHERE name = ?", (member_name,))
+        member_id = c.fetchone()
+        if member_id:
+            c.execute("SELECT date, weight FROM progress WHERE member_id = ? ORDER BY date ASC", (member_id[0],))
+            progress = c.fetchall()
+            conn.close()
+
+            if not progress:
+                messagebox.showinfo("No Progress", f"No progress recorded for {member_name}.")
+                return
+
+            progress_list = "\n".join([f"Date: {entry[0]}, Weight: {entry[1]:.2f} kg" for entry in progress])
+            messagebox.showinfo(f"{member_name}'s Progress", progress_list)
+        else:
+            conn.close()
+            messagebox.showinfo("Error", "Member not found.")
 
     def load_member_progress(self):
         conn = sqlite3.connect('gym_simulation.db')
@@ -345,28 +376,6 @@ class GymManagementGUI:
 
         self.view_progress_member_combo['values'] = [member[1] for member in members]
         self.view_progress_member_combo.set('')
-
-    def display_member_progress(self, event):
-        member_name = self.view_progress_member_combo.get()
-
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-        c.execute("SELECT member_id FROM members WHERE name = ?", (member_name,))
-        member_id = c.fetchone()
-        if member_id:
-            c.execute("SELECT date, weight FROM progress WHERE member_id = ?", (member_id[0],))
-            progress = c.fetchall()
-            conn.close()
-
-            if not progress:
-                messagebox.showinfo("No Progress", f"No progress recorded for {member_name}.")
-                return
-
-            progress_list = "\n".join([f"Date: {entry[0]}, Weight: {entry[1]:.2f} kg" for entry in progress])
-            messagebox.showinfo(f"{member_name}'s Progress", progress_list)
-        else:
-            conn.close()
-            messagebox.showinfo("Error", "Member not found.")
 
     def auto_add_trainers(self):
         conn = sqlite3.connect('gym_simulation.db')
@@ -440,4 +449,4 @@ class GymManagementGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     app = GymManagementGUI(root)
-    root.mainloop()
+    root.mainloop()   
