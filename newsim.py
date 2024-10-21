@@ -40,6 +40,7 @@ def create_database():
                     member_id INTEGER,
                     date TEXT,
                     weight REAL,
+                    bmi REAL,
                     FOREIGN KEY(member_id) REFERENCES members(member_id))''')
 
     conn.commit()
@@ -278,20 +279,20 @@ class GymManagementGUI:
                 return 0.025 * weight
             else:  # General Health
                 return 0.02 * weight
-    
+
     def view_all_trainers(self):
-            conn = sqlite3.connect('gym_simulation.db')
-            c = conn.cursor()
-            c.execute("SELECT * FROM trainers")
-            trainers = c.fetchall()
-            conn.close()
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM trainers")
+        trainers = c.fetchall()
+        conn.close()
 
-            if not trainers:
-                messagebox.showinfo("No Trainers", "No trainers found in the database.")
-                return
+        if not trainers:
+            messagebox.showinfo("No Trainers", "No trainers found in the database.")
+            return
 
-            trainer_list = "\n".join([f"{trainer[0]}: {trainer[1]}, Expertise: {trainer[2]}, Available Days: {trainer[3]}" for trainer in trainers])
-            messagebox.showinfo("Trainers", trainer_list)
+        trainer_list = "\n".join([f"{trainer[0]}: {trainer[1]}, Expertise: {trainer[2]}, Available Days: {trainer[3]}" for trainer in trainers])
+        messagebox.showinfo("Trainers", trainer_list)
 
     def view_all_members(self):
         conn = sqlite3.connect('gym_simulation.db')
@@ -316,12 +317,39 @@ class GymManagementGUI:
 
         conn = sqlite3.connect('gym_simulation.db')
         c = conn.cursor()
-        c.execute("SELECT member_id, weight FROM members")
+        c.execute("SELECT member_id, name, weight, height, goal FROM members")
         members = c.fetchall()
 
         for member in members:
-            member_id, initial_weight = member
-            weight_change = initial_weight * (0.005 * days_passed)  # Example logic for weight change
+            member_id, name, initial_weight, height, goal = member
+            weight_change = 0
+
+            # Adjust weight change based on the member's goal
+            if goal == "Weight Loss":
+                weight_change = -initial_weight * (0.01 * days_passed)  # Example: 1% weight loss per day
+            elif goal == "Muscle Gain":
+                weight_change = initial_weight * (0.005 * days_passed)  # Example: 0.5% weight gain per day
+            elif goal == "Fat Loss":
+                weight_change = -initial_weight * (0.015 * days_passed)  # Example: 1.5% fat loss per day
+            elif goal == "Endurance":
+                weight_change = initial_weight * (0.003 * days_passed)  # Example: 0.3% weight gain per day
+            elif goal == "Strength":
+                weight_change = initial_weight * (0.004 * days_passed)  # Example: 0.4% weight gain per day
+            elif goal == "Muscle Gain":
+                weight_change = initial_weight * (0.005 * days_passed)  # Example: 0.5% weight gain per day
+            elif goal == "Strength Building":
+                weight_change = initial_weight * (0.004 * days_passed)  # Example: 0.4% weight gain per day
+            elif goal == "Powerlifting":
+                weight_change = initial_weight * (0.003 * days_passed)  # Example: 0.3% weight gain per day
+            elif goal == "Core Strength":
+                weight_change = initial_weight * (0.002 * days_passed)  # Example: 0.2% weight change per day
+            elif goal == "Flexibility":
+                weight_change = initial_weight * (0.001 * days_passed)  # Example: 0.1% weight change per day
+            elif goal == "Rehabilitation":
+                weight_change = initial_weight * (0.001 * days_passed)  # Example: 0.1% weight change per day
+            else:  # General Health
+                weight_change = initial_weight * (0.002 * days_passed)  # Example: 0.2% weight change per day
+
             new_weight = initial_weight + weight_change
 
             # Get the last recorded progress date for this member
@@ -333,9 +361,12 @@ class GymManagementGUI:
             else:
                 current_date = datetime.now()
 
+            # Calculate BMI
+            bmi = new_weight / ((height / 100) ** 2)
+
             # Insert progress into the database
-            c.execute("INSERT INTO progress (member_id, date, weight) VALUES (?, ?, ?)",
-                      (member_id, current_date.strftime('%Y-%m-%d'), new_weight))
+            c.execute("INSERT INTO progress (member_id, date, weight, bmi) VALUES (?, ?, ?, ?)",
+                      (member_id, current_date.strftime('%Y-%m-%d'), new_weight, bmi))
         conn.commit()
         conn.close()
 
@@ -346,10 +377,11 @@ class GymManagementGUI:
 
         conn = sqlite3.connect('gym_simulation.db')
         c = conn.cursor()
-        c.execute("SELECT member_id FROM members WHERE name = ?", (member_name,))
-        member_id = c.fetchone()
-        if member_id:
-            c.execute("SELECT date, weight FROM progress WHERE member_id = ? ORDER BY date ASC", (member_id[0],))
+        c.execute("SELECT member_id, name, height FROM members WHERE name = ?", (member_name,))
+        member_info = c.fetchone()
+        if member_info:
+            member_id, name, height = member_info
+            c.execute("SELECT date, weight, bmi FROM progress WHERE member_id = ? ORDER BY date ASC", (member_id,))
             progress = c.fetchall()
             conn.close()
 
@@ -357,7 +389,7 @@ class GymManagementGUI:
                 messagebox.showinfo("No Progress", f"No progress recorded for {member_name}.")
                 return
 
-            progress_list = "\n".join([f"Date: {entry[0]}, Weight: {entry[1]:.2f} kg" for entry in progress])
+            progress_list = "\n".join([f"Date: {entry[0]}, Weight: {entry[1]:.2f} kg, BMI: {entry[2]:.2f}" for entry in progress])
             messagebox.showinfo(f"{member_name}'s Progress", progress_list)
         else:
             conn.close()
@@ -398,7 +430,7 @@ class GymManagementGUI:
             height = random.randint(150, 200)
             weight = random.uniform(50.0, 100.0)
             activity_level = random.randint(1, 10)
-            goal = random.choice(["Weight Loss", "Muscle Gain", "General Health"])
+            goal = random.choice(["Weight Loss", "Muscle Gain", "General Health", "Flexibility Improvement", "Stress Relief", "Mindfulness", "Fat Loss", "Endurance", "Strength", "Strength Building", "Powerlifting", "Core Strength", "Flexibility", "Rehabilitation"])
             expertise = random.choice(self.expertise_types)
 
             # Calculate protein, carb, and fiber needs
@@ -449,4 +481,4 @@ class GymManagementGUI:
 if __name__ == "__main__":
     root = tk.Tk()
     app = GymManagementGUI(root)
-    root.mainloop()   
+    root.mainloop()
