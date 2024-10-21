@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import sqlite3
 import random
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 
 # Database setup function
 def create_database():
@@ -16,6 +17,7 @@ def create_database():
     c.execute('''CREATE TABLE IF NOT EXISTS student_details (student_id INTEGER PRIMARY KEY, height INTEGER, weight INTEGER, age INTEGER, activity_level INTEGER, occupation_status TEXT, goal TEXT, FOREIGN KEY(student_id) REFERENCES students(student_id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS assignments (student_id INTEGER, trainer_id INTEGER, time_slot TEXT, date TEXT, FOREIGN KEY(student_id) REFERENCES students(student_id), FOREIGN KEY(trainer_id) REFERENCES trainers(trainer_id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS workouts (student_id INTEGER, date TEXT, exercises TEXT, FOREIGN KEY(student_id) REFERENCES students(student_id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL)''')
 
     conn.commit()
     conn.close()
@@ -25,26 +27,106 @@ class GymSimulatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Gym Facility Management Tool")
-        
-        # Set window size
         self.root.geometry("900x600")
         self.root.resizable(True, True)
+        self.root.configure(bg='#f5f5f5')
 
-        # Initialize database
+        # Initialize main_frame
+        self.main_frame = ttk.Frame(root, padding=10)
+        self.main_frame.grid(row=0, column=0, sticky="nsew")
+
         create_database()
+        self.logged_in = False
+        self.current_user = None
 
-        # Main Frame
-        main_frame = ttk.Frame(root, padding=10)
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        self.create_login_frame()
 
-        # Configure rows and columns to be responsive
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        main_frame.rowconfigure(2, weight=1)
+    def create_login_frame(self):
+        self.clear_main_frame()
+        login_frame = ttk.LabelFrame(self.main_frame, text="Login", padding=(10, 10))
+        login_frame.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
+
+        ttk.Label(login_frame, text="Username").grid(row=0, column=0, padx=5, pady=5)
+        self.username_entry = ttk.Entry(login_frame)
+        self.username_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(login_frame, text="Password").grid(row=1, column=0, padx=5, pady=5)
+        self.password_entry = ttk.Entry(login_frame, show='*')
+        self.password_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Button(login_frame, text="Login", command=self.login_user).grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+        ttk.Button(login_frame, text="Register", command=self.create_register_frame).grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+
+    def create_register_frame(self):
+        self.clear_main_frame()
+        register_frame = ttk.LabelFrame(self.main_frame, text="Register", padding=(10, 10))
+        register_frame.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
+
+        ttk.Label(register_frame, text="Username").grid(row=0, column=0, padx=5, pady=5)
+        self.reg_username_entry = ttk.Entry(register_frame)
+        self.reg_username_entry.grid(row=0, column=1, padx=5, pady=5)
+
+        ttk.Label(register_frame, text="Password").grid(row=1, column=0, padx=5, pady=5)
+        self.reg_password_entry = ttk.Entry(register_frame, show='*')
+        self.reg_password_entry.grid(row=1, column=1, padx=5, pady=5)
+
+        ttk.Button(register_frame, text="Register", command=self.register_user).grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+        ttk.Button(register_frame, text="Back to Login", command=self.create_login_frame).grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+
+    def clear_main_frame(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+    def login_user(self):
+        """ Logs in the user. """
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
+        user = c.fetchone()
+
+        if user:
+            self.logged_in = True
+            self.current_user = user[0]  # store user ID
+            messagebox.showinfo("Success", "Login successful!")
+            self.create_dashboard()
+        else:
+            messagebox.showerror("Login Error", "Invalid username or password.")
+        conn.close()
+
+    def register_user(self):
+        """ Registers a new user. """
+        username = self.reg_username_entry.get()
+        password = self.reg_password_entry.get()
+
+        if not username or not password:
+            messagebox.showerror("Input Error", "Please enter a username and password.")
+            return
+
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        try:
+            c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
+            conn.commit()
+            messagebox.showinfo("Success", "User registered successfully!")
+            self.create_login_frame()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Input Error", "Username already exists.")
+        finally:
+            conn.close()
+
+    def create_dashboard(self):
+        """ Creates the main dashboard after login. """
+        self.clear_main_frame()
+
+        # Dashboard Frame
+        dashboard_frame = ttk.Frame(self.main_frame, padding=10)
+        dashboard_frame.grid(row=0, column=0, sticky="nsew")
 
         # Frame for Admin Section
-        self.admin_frame = ttk.LabelFrame(main_frame, text="Add & Manage Gym Resources", padding=(10, 10))
+        self.admin_frame = ttk.LabelFrame(dashboard_frame, text="Add & Manage Gym Resources", padding=(10, 10))
         self.admin_frame.grid(row=0, column=0, sticky='ew', padx=10, pady=10)
 
         # Room Section
@@ -54,53 +136,49 @@ class GymSimulatorGUI:
         self.add_trainer_section()
 
         # Student Section
-        self.student_frame = ttk.LabelFrame(main_frame, text="Add Student", padding=(10, 10))
+        self.student_frame = ttk.LabelFrame(dashboard_frame, text="Add Student", padding=(10, 10))
         self.student_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=10)
         self.add_student_section(self.student_frame)
 
         # Progress Monitoring Section
-        self.progress_frame = ttk.LabelFrame(main_frame, text="View Progress", padding=(10, 10))
+        self.progress_frame = ttk.LabelFrame(dashboard_frame, text="View Progress", padding=(10, 10))
         self.progress_frame.grid(row=2, column=0, sticky='ew', padx=10, pady=10)
-        self.add_progress_section(self.progress_frame)  # Pass the parent frame
+        self.add_progress_section(self.progress_frame)
 
         # Output Area
-        self.output_text = tk.Text(main_frame, height=15, width=100, wrap=tk.WORD)
+        self.output_text = tk.Text(dashboard_frame, height=15, width=100, wrap=tk.WORD, bg="#ffffff", font=("Arial", 10))
         self.output_text.grid(row=3, column=0, columnspan=1, padx=10, pady=10, sticky='ew')
 
     def add_room_section(self):
         """ Adds the room management section. """
-        # Room ID Input
-        ttk.Label(self.admin_frame, text="Room ID").grid(row=0, column=0, padx=5, pady=5)
-        self.room_id_entry = ttk.Entry(self.admin_frame, width=27)  # Allow admin to input the room ID
+        ttk.Label(self.admin_frame, text="Room ID:", foreground="#2E8B57").grid(row=0, column=0, padx=5, pady=5)
+        self.room_id_entry = ttk.Entry(self.admin_frame, width=27)
         self.room_id_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        # Room Capacity Input
-        ttk.Label(self.admin_frame, text="Capacity").grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(self.admin_frame, text="Capacity:", foreground="#2E8B57").grid(row=0, column=2, padx=5, pady=5)
         self.room_capacity_entry = ttk.Entry(self.admin_frame, width=10)
         self.room_capacity_entry.grid(row=0, column=3, padx=5, pady=5)
 
-        # Room Type Selection
-        ttk.Label(self.admin_frame, text="Room Type").grid(row=0, column=4, padx=5, pady=5)
+        ttk.Label(self.admin_frame, text="Room Type:", foreground="#2E8B57").grid(row=0, column=4, padx=5, pady=5)
         self.room_type_combo = ttk.Combobox(self.admin_frame, values=["Workout Room", "Yoga Studio", "Weight Room"], state='readonly', width=27)
         self.room_type_combo.grid(row=0, column=5, padx=5, pady=5)
         self.room_type_combo.set("Workout Room")
 
-        # Button to Add Room
         ttk.Button(self.admin_frame, text="Add Room", command=self.add_room).grid(row=0, column=6, padx=5, pady=5)
 
     def add_trainer_section(self):
         """ Adds the trainer management section. """
-        ttk.Label(self.admin_frame, text="Trainer Name").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(self.admin_frame, text="Trainer Name:", foreground="#2E8B57").grid(row=1, column=0, padx=5, pady=5)
         self.trainer_name_entry = ttk.Entry(self.admin_frame, width=27)
         self.trainer_name_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        ttk.Label(self.admin_frame, text="Expertise").grid(row=1, column=2, padx=5, pady=5)
+        ttk.Label(self.admin_frame, text="Expertise:", foreground="#2E8B57").grid(row=1, column=2, padx=5, pady=5)
         self.trainer_expertise_combo = ttk.Combobox(self.admin_frame, values=["Fitness", "Yoga", "HIIT", "Weightlifting", "Pilates"], state='readonly', width=27)
         self.trainer_expertise_combo.grid(row=1, column=3, padx=5, pady=5)
         self.trainer_expertise_combo.set("Select Expertise")
 
         # Available Days Checkboxes
-        ttk.Label(self.admin_frame, text="Available Days").grid(row=1, column=4, padx=5, pady=5)
+        ttk.Label(self.admin_frame, text="Available Days:", foreground="#2E8B57").grid(row=1, column=4, padx=5, pady=5)
         self.available_days_frame = ttk.Frame(self.admin_frame)
         self.available_days_frame.grid(row=1, column=5, padx=5, pady=5)
 
@@ -108,20 +186,18 @@ class GymSimulatorGUI:
         for day, var in self.days_var.items():
             ttk.Checkbutton(self.available_days_frame, text=day, variable=var).pack(side=tk.LEFT)
 
-        ttk.Label(self.admin_frame, text="Start Time").grid(row=1, column=6, padx=5, pady=5)
-        self.start_time_combo = ttk.Combobox(self.admin_frame, values=[f"{hour:02}:00" for hour in range(24)], state='readonly', width=10)  # 00:00 to 23:00
+        ttk.Label(self.admin_frame, text="Start Time:", foreground="#2E8B57").grid(row=1, column=6, padx=5, pady=5)
+        self.start_time_combo = ttk.Combobox(self.admin_frame, values=[f"{hour:02}:00" for hour in range(24)], state='readonly', width=10)
         self.start_time_combo.grid(row=1, column=7, padx=5, pady=5)
         self.start_time_combo.set("Select Start Time")
 
-        ttk.Label(self.admin_frame, text="End Time").grid(row=1, column=8, padx=5, pady=5)
-        self.end_time_combo = ttk.Combobox(self.admin_frame, values=[f"{hour:02}:00" for hour in range(24)], state='readonly', width=10)  # 00:00 to 23:00
+        ttk.Label(self.admin_frame, text="End Time:", foreground="#2E8B57").grid(row=1, column=8, padx=5, pady=5)
+        self.end_time_combo = ttk.Combobox(self.admin_frame, values=[f"{hour:02}:00" for hour in range(24)], state='readonly', width=10)
         self.end_time_combo.grid(row=1, column=9, padx=5, pady=5)
         self.end_time_combo.set("Select End Time")
 
-        ttk.Label(self.admin_frame, text="Room").grid(row=1, column=10, padx=5, pady=5)
-
-        # Room selection combobox populated from the database
-        self.trainer_room_combo = ttk.Combobox(self.admin_frame, values=self.fetch_room_ids(), state='readonly', width=27)  # Populate with existing room IDs
+        ttk.Label(self.admin_frame, text="Room:", foreground="#2E8B57").grid(row=1, column=10, padx=5, pady=5)
+        self.trainer_room_combo = ttk.Combobox(self.admin_frame, values=self.fetch_room_ids(), state='readonly', width=27)
         self.trainer_room_combo.grid(row=1, column=11, padx=5, pady=5)
         self.trainer_room_combo.set("Select Room ID")
 
@@ -129,36 +205,36 @@ class GymSimulatorGUI:
 
     def add_student_section(self, parent):
         """ Adds the student management section. """
-        ttk.Label(self.student_frame, text="Student Name").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Student Name:", foreground="#2E8B57").grid(row=0, column=0, padx=5, pady=5)
         self.student_name_entry = ttk.Entry(self.student_frame, width=27)
         self.student_name_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Training Preference").grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Training Preference:", foreground="#2E8B57").grid(row=0, column=2, padx=5, pady=5)
         self.student_training_combo = ttk.Combobox(self.student_frame, values=["Yoga", "Weightlifting", "HIIT"], state='readonly', width=27)
         self.student_training_combo.grid(row=0, column=3, padx=5, pady=5)
         self.student_training_combo.set("Yoga")
 
-        ttk.Label(self.student_frame, text="Age").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Age:", foreground="#2E8B57").grid(row=1, column=0, padx=5, pady=5)
         self.age_entry = ttk.Entry(self.student_frame, width=10)
         self.age_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Height (cm)").grid(row=1, column=2, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Height (cm):", foreground="#2E8B57").grid(row=1, column=2, padx=5, pady=5)
         self.height_entry = ttk.Entry(self.student_frame, width=10)
         self.height_entry.grid(row=1, column=3, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Weight (kg)").grid(row=1, column=4, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Weight (kg):", foreground="#2E8B57").grid(row=1, column=4, padx=5, pady=5)
         self.weight_entry = ttk.Entry(self.student_frame, width=10)
         self.weight_entry.grid(row=1, column=5, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Activity Level (1-10)").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Activity Level (1-10):", foreground="#2E8B57").grid(row=2, column=0, padx=5, pady=5)
         self.activity_level_entry = ttk.Entry(self.student_frame, width=10)
         self.activity_level_entry.grid(row=2, column=1, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Occupation Status").grid(row=2, column=2, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Occupation Status:", foreground="#2E8B57").grid(row=2, column=2, padx=5, pady=5)
         self.occupation_entry = ttk.Entry(self.student_frame, width=27)
         self.occupation_entry.grid(row=2, column=3, padx=5, pady=5)
 
-        ttk.Label(self.student_frame, text="Goal").grid(row=2, column=4, padx=5, pady=5)
+        ttk.Label(self.student_frame, text="Goal:", foreground="#2E8B57").grid(row=2, column=4, padx=5, pady=5)
         self.goal_entry = ttk.Entry(self.student_frame, width=27)
         self.goal_entry.grid(row=2, column=5, padx=5, pady=5)
 
@@ -168,12 +244,13 @@ class GymSimulatorGUI:
 
     def add_progress_section(self, parent):
         """ Adds the progress monitoring section. """
-        ttk.Label(self.progress_frame, text="Select Time Period").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(self.progress_frame, text="Select Time Period:", foreground="#2E8B57").grid(row=0, column=0, padx=5, pady=5)
         self.period_combo = ttk.Combobox(self.progress_frame, values=["Daily", "Weekly", "Monthly", "Annually"])
         self.period_combo.set("Select Period")
         self.period_combo.grid(row=0, column=1, padx=5, pady=5)
 
         ttk.Button(self.progress_frame, text="View Progress", command=self.view_progress).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(self.progress_frame, text="Plot Progress", command=self.plot_student_progress).grid(row=1, column=0, padx=5, pady=5)
 
     def fetch_room_ids(self):
         """ Fetches existing room IDs for pre-selection. """
@@ -362,6 +439,46 @@ class GymSimulatorGUI:
             student_id, date, exercises = workout
             self.update_output(f"Student ID: {student_id}, Date: {date}, Exercises: {exercises}")
 
+        conn.close()
+
+    def plot_student_progress(self):
+        """ Plots weight progress for each student. """
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+
+        # Fetch all students
+        c.execute("SELECT student_id, name FROM students")
+        students = c.fetchall()
+
+        # Prompt user to select a student
+        student_names = [f"{student[0]}: {student[1]}" for student in students]
+        selected_student = tk.simpledialog.askstring("Select Student", "Enter Student ID to plot progress:\n" + "\n".join(student_names))
+
+        if selected_student:
+            c.execute(
+                "SELECT sd.weight, wd.date FROM student_details sd JOIN workouts wd ON sd.student_id = wd.student_id WHERE sd.student_id = ?",
+                (selected_student,)
+            )
+            data = c.fetchall()
+
+            if not data:
+                messagebox.showinfo("No Data", "No progress data available for the selected student.")
+                return
+
+            weights, dates = zip(*data)
+
+            # Convert dates for plotting
+            dates = [datetime.strptime(date, "%Y-%m-%d") for date in dates]
+            plt.figure(figsize=(10, 5))
+            plt.plot(dates, weights, marker='o')
+            plt.title(f"Weight Progress for Student ID: {selected_student}")
+            plt.xlabel("Date")
+            plt.ylabel("Weight (kg)")
+            plt.xticks(rotation=45)
+            plt.grid()
+            plt.tight_layout()
+            plt.show()
+        
         conn.close()
 
     def update_output(self, message):
