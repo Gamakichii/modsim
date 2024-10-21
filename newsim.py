@@ -171,118 +171,105 @@ class GymManagementGUI:
 
     def add_view_progress_section(self):
         ttk.Label(self.view_progress_frame, text="Member ID:").grid(row=0, column=0, padx=5, pady=5)
-        self.view_member_id_entry = ttk.Entry(self.view_progress_frame)
-        self.view_member_id_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.member_id_entry = ttk.Entry(self.view_progress_frame)
+        self.member_id_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        ttk.Button(self.view_progress_frame, text="View Progress", command=self.view_member_progress).grid(row=1, column=0, columnspan=2, padx=5, pady=5)
+        ttk.Button(self.view_progress_frame, text="View Progress", command=self.view_progress).grid(row=1, column=0, columnspan=2, padx=5, pady=5)
+
+    def update_goals(self, event):
+        expertise = self.trainer_expertise_combo.get()
+        if expertise in self.create_goal_options:
+            goals = self.create_goal_options[expertise]
+            self.trainer_goal_combo['values'] = goals
+            self.trainer_goal_combo.current(0)
+
+    def update_goals_member(self, event):
+        expertise = self.trainer_expertise_member_combo.get()
+        if expertise in self.create_goal_options:
+            goals = self.create_goal_options[expertise]
+            self.member_goal_combo['values'] = goals
+            self.member_goal_combo.current(0)
+
+    def view_all_trainers(self):
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM trainers")
+        trainers = c.fetchall()
+        conn.close()
+        
+        trainer_list = '\n'.join([f"{trainer[0]}: {trainer[1]}, Expertise: {trainer[2]}, Days: {trainer[3]}" for trainer in trainers])
+        messagebox.showinfo("All Trainers", trainer_list or "No trainers found.")
+
+    def view_all_members(self):
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT * FROM members")
+        members = c.fetchall()
+        conn.close()
+        
+        member_list = '\n'.join([f"{member[0]}: {member[1]}, Goal: {member[6]}, Trainer ID: {member[10]}" for member in members])
+        messagebox.showinfo("All Members", member_list or "No members found.")
 
     def auto_add_trainers(self):
-        for trainer in self.trainer_names:
+        for name in self.trainer_names:
             self.trainer_name_entry.delete(0, tk.END)
-            self.trainer_name_entry.insert(0, trainer)
-            self.trainer_expertise_combo.current(random.randint(0, len(self.expertise_types) - 1))
-            self.add_trainer()
+            self.trainer_name_entry.insert(0, name)
+            expertise = random.choice(self.expertise_types)
+            self.trainer_expertise_combo.set(expertise)
+
+            # Set available days randomly for the auto-generated trainer
+            for day, var in self.days_var.items():
+                var.set(random.choice([True, False]))  # Randomly select available days
+
+            # Check if all required fields are filled
+            if self.trainer_name_entry.get() and expertise and any(var.get() for var in self.days_var.values()):
+                self.add_trainer()  # Add the trainer if all fields are filled
+            else:
+                messagebox.showerror("Error", "Please fill all fields.")
+
+        messagebox.showinfo("Success", "Auto-added trainers successfully!")
 
     def auto_add_members(self):
-        for _ in range(5):
+        member_names = ["Alice Johnson", "Bob Davis", "Cathy White", "Daniel Black", "Eva Brown"]
+        for name in member_names:
             self.member_name_entry.delete(0, tk.END)
-            self.member_name_entry.insert(0, f"Member {_ + 1}")
-            self.member_birthday_entry.set_date(datetime.today().replace(year=datetime.today().year - random.randint(20, 40)))
+            self.member_name_entry.insert(0, name)
+            self.member_birthday_entry.set_date(datetime.today())
             self.member_height_entry.delete(0, tk.END)
             self.member_height_entry.insert(0, random.randint(150, 190))
             self.member_weight_entry.delete(0, tk.END)
-            self.member_weight_entry.insert(0, random.randint(50, 100))
+            self.member_weight_entry.insert(0, random.uniform(50, 100))
             self.activity_level_entry.delete(0, tk.END)
             self.activity_level_entry.insert(0, random.randint(1, 10))
-            self.trainer_expertise_member_combo.current(random.randint(0, len(self.expertise_types) - 1))
-            self.update_goals_member(None)  # Update goals after setting expertise
-            self.member_goal_combo.current(random.randint(0, len(self.create_goal_options[self.expertise_types[self.trainer_expertise_member_combo.current()]]) - 1))
-            self.add_member()
 
-    def update_goals(self, event):
-        selected_expertise = self.trainer_expertise_combo.get()
-        goals = self.create_goal_options.get(selected_expertise, [])
-        self.member_goal_combo['values'] = goals
-        self.member_goal_combo.set('')  # Clear current selection
+            # Randomly assign a trainer
+            assigned_trainer_id = random.choice([1, 2, 3, None])  # Assuming trainer IDs start from 1
+            self.trainer_expertise_member_combo.set(random.choice(self.expertise_types))
+            self.member_goal_combo.set(random.choice(self.create_goal_options[self.trainer_expertise_member_combo.get()]))
 
-    def update_goals_member(self, event):
-        selected_expertise = self.trainer_expertise_member_combo.get()
-        goals = self.create_goal_options.get(selected_expertise, [])
-        self.member_goal_combo['values'] = goals
-        self.member_goal_combo.set('')  # Clear current selection
+            self.add_member()  # Add member using the existing add_member method
 
-    def assign_unassigned_members(self):
-        if not self.unassigned_assigned:
-            conn = sqlite3.connect('gym_simulation.db')
-            c = conn.cursor()
-
-            # Select all unassigned members
-            c.execute("SELECT member_id FROM members WHERE trainer_id IS NULL")
-            unassigned_members = c.fetchall()
-
-            # Assign each unassigned member to a random trainer
-            for member in unassigned_members:
-                trainer_id = random.randint(1, len(self.trainer_names))  # Assuming trainer IDs start from 1
-                c.execute("UPDATE members SET trainer_id = ? WHERE member_id = ?", (trainer_id, member[0]))
-
-            conn.commit()
-            conn.close()
-            self.unassigned_assigned = True
-            messagebox.showinfo("Success", "Unassigned members have been assigned to trainers.")
-        else:
-            messagebox.showwarning("Warning", "Members have already been assigned to trainers.")
-
-    def simulate_progress(self):
-        days_passed = int(self.days_passed_entry.get())
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-
-        c.execute("SELECT member_id, weight FROM members")
-        members = c.fetchall()
-
-        for member in members:
-            weight_change = random.uniform(-1, 1)  # Simulating weight change
-            new_weight = member[1] + weight_change
-            c.execute("INSERT INTO progress (member_id, date, weight) VALUES (?, ?, ?)", (member[0], datetime.now().date(), new_weight))
-
-        conn.commit()
-        conn.close()
-        messagebox.showinfo("Success", "Progress simulated successfully.")
-
-    def view_member_progress(self):
-        member_id = self.view_member_id_entry.get()
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-
-        c.execute("SELECT * FROM progress WHERE member_id = ?", (member_id,))
-        progress_data = c.fetchall()
-
-        if progress_data:
-            progress_info = "\n".join([f"Date: {data[1]}, Weight: {data[2]}" for data in progress_data])
-            messagebox.showinfo("Progress Data", f"Member ID: {member_id}\n{progress_info}")
-        else:
-            messagebox.showwarning("No Data", "No progress data found for this member.")
-
-        conn.close()
+        messagebox.showinfo("Success", "Auto-added members successfully!")
 
     def add_trainer(self):
-        name = self.trainer_name_entry.get()
+        trainer_name = self.trainer_name_entry.get()
         expertise = self.trainer_expertise_combo.get()
         available_days = [day for day, var in self.days_var.items() if var.get()]
-        available_days_str = ', '.join(available_days)
 
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-
-        c.execute("INSERT INTO trainers (name, expertise, available_days) VALUES (?, ?, ?)",
-                  (name, expertise, available_days_str))
-        conn.commit()
-        conn.close()
-
-        messagebox.showinfo("Success", f"Trainer '{name}' added successfully.")
+        if trainer_name and expertise and available_days:
+            conn = sqlite3.connect('gym_simulation.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO trainers (name, expertise, available_days) VALUES (?, ?, ?)",
+                      (trainer_name, expertise, ','.join(available_days)))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Success", "Trainer added successfully!")
+            self.trainer_name_entry.delete(0, tk.END)
+        else:
+            messagebox.showerror("Error", "Please fill all fields.")
 
     def add_member(self):
-        name = self.member_name_entry.get()
+        member_name = self.member_name_entry.get()
         birthday = self.member_birthday_entry.get()
         height = self.member_height_entry.get()
         weight = self.member_weight_entry.get()
@@ -290,49 +277,89 @@ class GymManagementGUI:
         goal = self.member_goal_combo.get()
         trainer_expertise = self.trainer_expertise_member_combo.get()
 
-        protein_needed = float(weight) * 0.2  # Example calculation
-        carb_needed = float(weight) * 0.5  # Example calculation
-        fiber_needed = float(weight) * 0.1  # Example calculation
+        if member_name and birthday and height and weight and activity_level and goal:
+            conn = sqlite3.connect('gym_simulation.db')
+            c = conn.cursor()
+            c.execute("INSERT INTO members (name, birthday, height, weight, activity_level, goal, protein_needed, carb_needed, fiber_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      (member_name, birthday, height, weight, activity_level, goal, 0, 0, 0))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Success", "Member added successfully!")
+            self.member_name_entry.delete(0, tk.END)
+            self.member_birthday_entry.set_date(datetime.today())
+            self.member_height_entry.delete(0, tk.END)
+            self.member_weight_entry.delete(0, tk.END)
+            self.activity_level_entry.delete(0, tk.END)
+        else:
+            messagebox.showerror("Error", "Please fill all fields.")
 
+    def assign_unassigned_members(self):
         conn = sqlite3.connect('gym_simulation.db')
         c = conn.cursor()
+        c.execute("SELECT member_id, name FROM members WHERE trainer_id IS NULL")
+        unassigned_members = c.fetchall()
 
-        c.execute("INSERT INTO members (name, birthday, height, weight, activity_level, goal, protein_needed, carb_needed, fiber_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                  (name, birthday, height, weight, activity_level, goal, protein_needed, carb_needed, fiber_needed))
+        if not unassigned_members:
+            messagebox.showinfo("Info", "No unassigned members.")
+            return
+
+        c.execute("SELECT trainer_id, name FROM trainers")
+        trainers = c.fetchall()
+
+        for member in unassigned_members:
+            member_id, member_name = member
+            assigned_trainer = random.choice(trainers)
+            trainer_id = assigned_trainer[0]
+            c.execute("UPDATE members SET trainer_id = ? WHERE member_id = ?", (trainer_id, member_id))
+            messagebox.showinfo("Assigned", f"{member_name} has been assigned to trainer {assigned_trainer[1]}.")
+
         conn.commit()
         conn.close()
 
-        messagebox.showinfo("Success", f"Member '{name}' added successfully.")
+    def simulate_progress(self):
+        days_passed = self.days_passed_entry.get()
+        if not days_passed.isdigit() or int(days_passed) < 0:
+            messagebox.showerror("Error", "Please enter a valid number of days.")
+            return
 
-    def view_all_trainers(self):
+        # Simulate progress for each member based on the logic required
         conn = sqlite3.connect('gym_simulation.db')
         c = conn.cursor()
-
-        c.execute("SELECT * FROM trainers")
-        trainers = c.fetchall()
-        conn.close()
-
-        if trainers:
-            trainers_info = "\n".join([f"ID: {trainer[0]}, Name: {trainer[1]}, Expertise: {trainer[2]}, Available Days: {trainer[3]}" for trainer in trainers])
-            messagebox.showinfo("All Trainers", trainers_info)
-        else:
-            messagebox.showinfo("No Trainers", "No trainers found.")
-
-    def view_all_members(self):
-        conn = sqlite3.connect('gym_simulation.db')
-        c = conn.cursor()
-
-        c.execute("SELECT * FROM members")
+        c.execute("SELECT member_id, weight FROM members")
         members = c.fetchall()
+
+        for member in members:
+            member_id = member[0]
+            current_weight = member[1]
+            # Simulate weight change logic (replace with your own logic)
+            new_weight = current_weight - (int(days_passed) * 0.1)  # Example: lose 0.1kg per day
+            c.execute("INSERT INTO progress (member_id, date, weight) VALUES (?, ?, ?)",
+                      (member_id, datetime.now().strftime("%Y-%m-%d"), new_weight))
+            c.execute("UPDATE members SET weight = ? WHERE member_id = ?", (new_weight, member_id))
+
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Success", "Progress simulated successfully!")
+
+    def view_progress(self):
+        member_id = self.member_id_entry.get()
+        if not member_id.isdigit():
+            messagebox.showerror("Error", "Please enter a valid member ID.")
+            return
+
+        conn = sqlite3.connect('gym_simulation.db')
+        c = conn.cursor()
+        c.execute("SELECT date, weight FROM progress WHERE member_id = ?", (member_id,))
+        progress = c.fetchall()
         conn.close()
 
-        if members:
-            members_info = "\n".join([f"ID: {member[0]}, Name: {member[1]}, Height: {member[3]}, Weight: {member[4]}" for member in members])
-            messagebox.showinfo("All Members", members_info)
-        else:
-            messagebox.showinfo("No Members", "No members found.")
+        if not progress:
+            messagebox.showinfo("Progress", "No progress found for this member.")
+            return
 
-# Run the application
+        progress_list = '\n'.join([f"Date: {entry[0]}, Weight: {entry[1]}" for entry in progress])
+        messagebox.showinfo(f"Progress for Member ID {member_id}", progress_list)
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = GymManagementGUI(root)
