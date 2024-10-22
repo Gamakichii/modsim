@@ -180,7 +180,7 @@ class GymManagementGUI:
     def update_goals(self, event):
         expertise = self.trainer_expertise_combo.get()
         goals = self.create_goal_options.get(expertise, [])
-        self.trainer_expertise_combo['values'] = goals
+        self.trainer_expertise_combo['values'] = self.expertise_types
 
     def update_goals_member(self, event):
         expertise = self.trainer_expertise_member_combo.get()
