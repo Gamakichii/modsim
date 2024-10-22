@@ -322,11 +322,18 @@ class GymManagementGUI:
 
         conn = sqlite3.connect('gym_simulation.db')
         c = conn.cursor()
-        c.execute("SELECT member_id, name, weight, height, goal, activity_level FROM members")
+        c.execute("SELECT member_id, name, weight, height, goal, activity_level, trainer_id FROM members")
         members = c.fetchall()
+        conn.close()
 
         for member in members:
-            member_id, name, initial_weight, height, goal, activity_level = member
+            member_id, name, initial_weight, height, goal, activity_level, trainer_id = member
+
+            # Check if the member has an assigned trainer
+            if trainer_id is None:
+                messagebox.showinfo(f"No Assigned Trainer for {name}", f"{name} does not have an assigned trainer and cannot have their progress simulated.")
+                continue
+
             weight_change = 0
 
             # Adjust weight change based on the member's goal and activity level
@@ -354,6 +361,8 @@ class GymManagementGUI:
             new_weight = initial_weight + weight_change
 
             # Get the last recorded progress date for this member
+            conn = sqlite3.connect('gym_simulation.db')
+            c = conn.cursor()
             c.execute("SELECT date FROM progress WHERE member_id = ? ORDER BY date DESC LIMIT 1", (member_id,))
             last_date = c.fetchone()
             if last_date:
@@ -361,15 +370,18 @@ class GymManagementGUI:
                 current_date = last_date + timedelta(weeks=weeks_passed)
             else:
                 current_date = datetime.now()
+            conn.close()
 
             # Calculate BMI
             bmi = new_weight / ((height / 100) ** 2)
 
             # Insert progress into the database
+            conn = sqlite3.connect('gym_simulation.db')
+            c = conn.cursor()
             c.execute("INSERT INTO progress (member_id, date, weight, bmi) VALUES (?, ?, ?, ?)",
                     (member_id, current_date.strftime('%Y-%m-%d'), new_weight, bmi))
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()
 
         messagebox.showinfo("Success", "Progress simulated successfully!")
 
@@ -386,10 +398,18 @@ class GymManagementGUI:
                 "WHERE m.name = ? "
                 "ORDER BY p.date ASC", (member_name,))
         member_progress = c.fetchall()
+
+        # Check if the member has an assigned trainer
+        c.execute("SELECT trainer_id FROM members WHERE name = ?", (member_name,))
+        trainer_id = c.fetchone()
         conn.close()
 
         if not member_progress:
             messagebox.showinfo("No Progress", f"No progress recorded for {member_name}.")
+            return
+
+        if not trainer_id or trainer_id[0] is None:
+            messagebox.showinfo("No Assigned Trainer", f"{member_name} does not have an assigned trainer and cannot view their progress.")
             return
 
         progress_list = []
